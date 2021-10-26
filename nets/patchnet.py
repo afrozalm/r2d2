@@ -35,13 +35,16 @@ class BaseNet (nn.Module):
     def forward_one(self, x):
         raise NotImplementedError()
 
-    def forward(self, imgs, **kw):
+    def forward(self, img, **kw):
+        return self.forward_one(img)
+        """
         res = [self.forward_one(img) for img in imgs]
         # merge all dictionaries into one
         res = {k:[r[k] for r in res if k in r][0] for k in {k for r in res for k in r}}
         # I add "[0]" after the list comprehension for torch script to run successfully.
         # Delete "[0]" for original net. - Seth Zhao
         return dict(res, imgs=imgs, **kw)
+        """
 
 
 
