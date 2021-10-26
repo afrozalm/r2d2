@@ -13,16 +13,23 @@ class BaseNet (nn.Module):
         - a pixelwise descriptor
         - a pixelwise confidence
     """
+    def softplus(self, ux):
+        x = F.softplus(ux)
+        return x/(1+x)
+
     def softmax(self, ux):
-        if ux.shape[1] == 1:
-            x = F.softplus(ux)
-            return x / (1 + x)  # for sure in [0,1], much less plateaus than softmax
-        elif ux.shape[1] == 2:
-            return F.softmax(ux, dim=1)[:,1:2]
+        return F.softmax(ux, dim=1)[:,1:2]
 
     def normalize(self, x, ureliability, urepeatability):
+        """
+            repeatability takes the softplus branch in original code
+            reliability takes the softmax
+
+            removed the if-else and create separate funciton to remove
+            tracing errors
+        """
         return dict(descriptors = F.normalize(x, p=2, dim=1),
-                    repeatability = self.softmax( urepeatability ),
+                    repeatability = self.softplus( urepeatability ),
                     reliability = self.softmax( ureliability ))
 
     def forward_one(self, x):
@@ -31,7 +38,9 @@ class BaseNet (nn.Module):
     def forward(self, imgs, **kw):
         res = [self.forward_one(img) for img in imgs]
         # merge all dictionaries into one
-        res = {k:[r[k] for r in res if k in r] for k in {k for r in res for k in r}}
+        res = {k:[r[k] for r in res if k in r][0] for k in {k for r in res for k in r}}
+        # I add "[0]" after the list comprehension for torch script to run successfully.
+        # Delete "[0]" for original net. - Seth Zhao
         return dict(res, imgs=imgs, **kw)
 
 
@@ -56,7 +65,7 @@ class PatchNet (BaseNet):
     def _add_conv(self, outd, k=3, stride=1, dilation=1, bn=True, relu=True, k_pool = 1, pool_type='max'):
         # as in the original implementation, dilation is applied at the end of layer, so it will have impact only from next layer
         d = self.dilation * dilation
-        if self.dilated: 
+        if self.dilated:
             conv_params = dict(padding=((k-1)*d)//2, dilation=d, stride=1)
             self.dilation *= stride
         else:
@@ -65,7 +74,7 @@ class PatchNet (BaseNet):
         if bn and self.bn: self.ops.append( self._make_bn(outd) )
         if relu: self.ops.append( nn.ReLU(inplace=True) )
         self.curchan = outd
-        
+
         if k_pool > 1:
             if pool_type == 'avg':
                 self.ops.append(torch.nn.AvgPool2d(kernel_size=k_pool))
@@ -73,7 +82,7 @@ class PatchNet (BaseNet):
                 self.ops.append(torch.nn.MaxPool2d(kernel_size=k_pool))
             else:
                 print(f"Error, unknown pooling type {pool_type}...")
-    
+
     def forward_one(self, x):
         assert self.ops, "You need to add convolutions first"
         for n,op in enumerate(self.ops):
@@ -126,7 +135,7 @@ class Quad_L2Net_ConfCFS (Quad_L2Net):
         self.clf = nn.Conv2d(self.out_dim, 2, kernel_size=1)
         # repeatability classifier: for some reasons it's a softplus, not a softmax!
         # Why? I guess it's a mistake that was left unnoticed in the code for a long time...
-        self.sal = nn.Conv2d(self.out_dim, 1, kernel_size=1) 
+        self.sal = nn.Conv2d(self.out_dim, 1, kernel_size=1)
 
     def forward_one(self, x):
         assert self.ops, "You need to add convolutions first"
@@ -152,18 +161,18 @@ class Fast_Quad_L2Net (PatchNet):
         self._add_conv( 16*mchan)
         self._add_conv( 32*mchan, stride=2)
         self._add_conv( 32*mchan)
-        
+
         # replace last 8x8 convolution with 3 2x2 convolutions
         self._add_conv( 32*mchan, k=2, stride=2, relu=relu22)
         self._add_conv( 32*mchan, k=2, stride=2, relu=relu22)
         self._add_conv(dim, k=2, stride=2, bn=False, relu=False)
-        
+
         # Go back to initial image resolution with upsampling
         self.ops.append(torch.nn.Upsample(scale_factor=downsample_factor, mode='bilinear', align_corners=False))
-        
+
         self.out_dim = dim
-        
-        
+
+
 class Fast_Quad_L2Net_ConfCFS (Fast_Quad_L2Net):
     """ Fast r2d2 architecture
     """
@@ -171,11 +180,11 @@ class Fast_Quad_L2Net_ConfCFS (Fast_Quad_L2Net):
         Fast_Quad_L2Net.__init__(self, **kw)
         # reliability classifier
         self.clf = nn.Conv2d(self.out_dim, 2, kernel_size=1)
-        
+
         # repeatability classifier: for some reasons it's a softplus, not a softmax!
         # Why? I guess it's a mistake that was left unnoticed in the code for a long time...
-        self.sal = nn.Conv2d(self.out_dim, 1, kernel_size=1) 
-        
+        self.sal = nn.Conv2d(self.out_dim, 1, kernel_size=1)
+
     def forward_one(self, x):
         assert self.ops, "You need to add convolutions first"
         for op in self.ops:
