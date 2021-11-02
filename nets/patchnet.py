@@ -28,9 +28,10 @@ class BaseNet (nn.Module):
             removed the if-else and create separate funciton to remove
             tracing errors
         """
-        return dict(descriptors = F.normalize(x, p=2, dim=1),
-                    repeatability = self.softplus( urepeatability ),
-                    reliability = self.softmax( ureliability ))
+        # return dict(descriptors = )
+        return [F.normalize(x, p=2, dim=1),
+                self.softplus( urepeatability ),
+                self.softmax( ureliability )]
 
     def forward_one(self, x):
         raise NotImplementedError()

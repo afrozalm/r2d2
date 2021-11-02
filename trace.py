@@ -28,7 +28,7 @@ model = load_network("./models/r2d2_WASF_N16.pt")
 model.eval()
 print(model)
 # example1 = torch.rand(1, 1, 3, 256, 256)
-example1 = torch.rand(32, 3, 256, 256)
+example1 = torch.rand(1, 3, 256, 256)
 #                     batch/ rgb/h/w
 traced_script_module = torch.jit.trace(model, example1, strict = False)
 traced_script_module.save("traced_r2d2_WASF_N16.pt")
