@@ -24,14 +24,14 @@ class BaseNet (nn.Module):
         """
             repeatability takes the softplus branch in original code
             reliability takes the softmax
-
             removed the if-else and create separate funciton to remove
             tracing errors
         """
         # return dict(descriptors = )
-        return [F.normalize(x, p=2, dim=1),
-                self.softplus( urepeatability ),
-                self.softmax( ureliability )]
+        score  = torch.multiply(
+            self.softplus( urepeatability ),
+            self.softmax( ureliability ))
+        return [F.normalize(x, p=2, dim=1), score]
 
     def forward_one(self, x):
         raise NotImplementedError()
